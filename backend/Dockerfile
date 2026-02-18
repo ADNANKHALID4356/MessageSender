@@ -5,7 +5,7 @@
 # ===========================================
 
 # ── Stage 1: Build ──────────────────────────────────────────
-FROM node:20-alpine AS builder
+FROM node:25-alpine AS builder
 
 # Install pnpm globally
 RUN corepack enable && corepack prepare pnpm@8.15.4 --activate
@@ -39,7 +39,7 @@ RUN pnpm --filter backend --prod deploy /app/backend-prod
 
 
 # ── Stage 2: Production image ───────────────────────────────
-FROM node:20-alpine AS production
+FROM node:25-alpine AS production
 
 # Security: run as non-root
 RUN addgroup -S appgroup && adduser -S appuser -G appgroup
