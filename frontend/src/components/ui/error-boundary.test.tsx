@@ -152,26 +152,22 @@ describe('ErrorFallback', () => {
 
   it('should show error details in development', () => {
     const originalEnv = process.env.NODE_ENV;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (process.env as any).NODE_ENV = 'development';
+    (process.env as Record<string, unknown>).NODE_ENV = 'development';
 
     render(<ErrorFallback error={mockError} reset={mockReset} />);
     expect(screen.getByText('Error Details')).toBeInTheDocument();
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (process.env as any).NODE_ENV = originalEnv;
+    (process.env as Record<string, unknown>).NODE_ENV = originalEnv;
   });
 
   it('should display digest if present', () => {
     const digestError = new Error('with digest') as Error & { digest?: string };
     digestError.digest = 'abc123';
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (process.env as any).NODE_ENV = 'development';
+    (process.env as Record<string, unknown>).NODE_ENV = 'development';
 
     render(<ErrorFallback error={digestError} reset={mockReset} />);
     expect(screen.getByText(/abc123/)).toBeInTheDocument();
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (process.env as any).NODE_ENV = 'test';
+    (process.env as Record<string, unknown>).NODE_ENV = 'test';
   });
 });
