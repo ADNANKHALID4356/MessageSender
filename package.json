@@ -1,0 +1,61 @@
+{
+  "name": "messagesender",
+  "version": "1.0.0",
+  "description": "Facebook Page Messaging & Management Platform",
+  "private": true,
+  "scripts": {
+    "dev": "concurrently \"pnpm --filter frontend dev\" \"pnpm --filter backend start:dev\"",
+    "dev:frontend": "pnpm --filter frontend dev",
+    "dev:backend": "pnpm --filter backend start:dev",
+    "build": "pnpm --filter frontend build && pnpm --filter backend build",
+    "build:frontend": "pnpm --filter frontend build",
+    "build:backend": "pnpm --filter backend build",
+    "start": "pnpm --filter frontend start & pnpm --filter backend start:prod",
+    "test": "pnpm -r test",
+    "test:cov": "pnpm --filter backend test:cov",
+    "test:e2e": "pnpm --filter backend test:e2e",
+    "lint": "pnpm -r lint",
+    "lint:fix": "pnpm -r lint:fix",
+    "format": "prettier --write \"**/*.{ts,tsx,js,json,md}\"",
+    "db:migrate": "pnpm --filter backend prisma:migrate",
+    "db:migrate:prod": "pnpm --filter backend prisma:migrate:prod",
+    "db:seed": "pnpm --filter backend prisma:seed",
+    "db:studio": "pnpm --filter backend prisma:studio",
+    "db:generate": "pnpm --filter backend prisma:generate",
+    "db:reset": "pnpm --filter backend prisma:reset",
+    "docker:up": "docker-compose up -d",
+    "docker:down": "docker-compose down",
+    "docker:logs": "docker-compose logs -f",
+    "docker:prod:build": "docker-compose -f docker-compose.yml -f docker-compose.prod.yml build",
+    "docker:prod:up": "docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d",
+    "docker:prod:down": "docker-compose -f docker-compose.yml -f docker-compose.prod.yml down",
+    "docker:prod:logs": "docker-compose -f docker-compose.yml -f docker-compose.prod.yml logs -f",
+    "docker:prod:restart": "docker-compose -f docker-compose.yml -f docker-compose.prod.yml restart",
+    "docker:prod:ps": "docker-compose -f docker-compose.yml -f docker-compose.prod.yml ps",
+    "backup:db": "docker exec messagesender_postgres pg_dump -U messagesender messagesender_db > backup_$(date +%Y%m%d_%H%M%S).sql",
+    "clean": "pnpm -r exec rm -rf node_modules dist .next coverage",
+    "typecheck": "pnpm -r exec tsc --noEmit",
+    "validate:prod": "node scripts/validate-production.js",
+    "prepare": "husky install"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2",
+    "husky": "^9.0.11",
+    "lint-staged": "^15.2.2",
+    "prettier": "^3.2.5"
+  },
+  "lint-staged": {
+    "*.{ts,tsx}": [
+      "eslint --fix",
+      "prettier --write"
+    ],
+    "*.{json,md}": [
+      "prettier --write"
+    ]
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "pnpm": ">=8.0.0"
+  },
+  "packageManager": "pnpm@8.15.4"
+}

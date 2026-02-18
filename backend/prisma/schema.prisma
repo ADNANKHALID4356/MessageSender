@@ -1,0 +1,921 @@
+// ===========================================
+// PRISMA SCHEMA - Facebook Page Messaging Platform
+// ===========================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ===========================================
+// ADMIN & AUTH MODELS
+// ===========================================
+
+model Admin {
+  id             String    @id @default(uuid())
+  username       String    @unique @db.VarChar(50)
+  email          String    @unique @db.VarChar(255)
+  passwordHash   String    @map("password_hash") @db.VarChar(255)
+  firstName      String?   @map("first_name") @db.VarChar(100)
+  lastName       String?   @map("last_name") @db.VarChar(100)
+  avatarUrl      String?   @map("avatar_url") @db.VarChar(500)
+  notificationPreferences Json? @default("{}") @map("notification_preferences")
+  lastLoginAt    DateTime? @map("last_login_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  sessions       Session[]
+  activityLogs   ActivityLog[]
+  conversations  Conversation[] @relation("AdminConversations")
+  notes          ConversationNote[]
+  campaigns      Campaign[]
+
+  @@map("admins")
+}
+
+model User {
+  id                String    @id @default(uuid())
+  email             String    @unique @db.VarChar(255)
+  passwordHash      String    @map("password_hash") @db.VarChar(255)
+  firstName         String    @map("first_name") @db.VarChar(100)
+  lastName          String?   @map("last_name") @db.VarChar(100)
+  avatarUrl         String?   @map("avatar_url") @db.VarChar(500)
+  notificationPreferences Json? @default("{}") @map("notification_preferences")
+  status            UserStatus @default(PENDING)
+  invitedAt         DateTime? @map("invited_at")
+  inviteAcceptedAt  DateTime? @map("invite_accepted_at")
+  invitationToken   String?   @map("invitation_token") @db.VarChar(255)
+  invitationExpiresAt DateTime? @map("invitation_expires_at")
+  lastLoginAt       DateTime? @map("last_login_at")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+
+  sessions          Session[]
+  workspaceAccess   WorkspaceUserAccess[]
+  activityLogs      ActivityLog[]
+  conversations     Conversation[]
+  notes             ConversationNote[] @relation("UserNotes")
+  campaigns         Campaign[] @relation("UserCampaigns")
+
+  @@map("users")
+}
+
+enum UserStatus {
+  PENDING
+  ACTIVE
+  INACTIVE
+}
+
+model Session {
+  id           String    @id @default(uuid())
+  userId       String?   @map("user_id")
+  adminId      String?   @map("admin_id")
+  refreshToken String    @map("refresh_token") @db.VarChar(500)
+  ipAddress    String?   @map("ip_address") @db.VarChar(45)
+  userAgent    String?   @map("user_agent") @db.VarChar(500)
+  expiresAt    DateTime  @map("expires_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+
+  user         User?     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  admin        Admin?    @relation(fields: [adminId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([adminId])
+  @@index([expiresAt])
+  @@map("sessions")
+}
+
+// ===========================================
+// WORKSPACE MODELS
+// ===========================================
+
+model Workspace {
+  id               String    @id @default(uuid())
+  name             String    @db.VarChar(100)
+  description      String?   @db.VarChar(500)
+  logoUrl          String?   @map("logo_url") @db.VarChar(500)
+  colorTheme       String    @default("#3B82F6") @map("color_theme") @db.VarChar(7)
+  isActive         Boolean   @default(true) @map("is_active")
+  sortOrder        Int       @default(0) @map("sort_order")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+
+  userAccess       WorkspaceUserAccess[]
+  facebookAccounts FacebookAccount[]
+  pages            Page[]
+  contacts         Contact[]
+  tags             Tag[]
+  customFields     CustomFieldDefinition[]
+  segments         Segment[]
+  campaigns        Campaign[]
+  conversations    Conversation[]
+  activityLogs     ActivityLog[]
+  messageTemplates MessageTemplate[]
+  cannedResponses  CannedResponse[]
+  attachments       Attachment[]
+
+  @@map("workspaces")
+}
+
+model WorkspaceUserAccess {
+  id              String          @id @default(uuid())
+  workspaceId     String          @map("workspace_id")
+  userId          String          @map("user_id")
+  permissionLevel PermissionLevel @map("permission_level")
+  createdAt       DateTime        @default(now()) @map("created_at")
+  updatedAt       DateTime        @updatedAt @map("updated_at")
+
+  workspace       Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user            User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, userId])
+  @@index([userId])
+  @@map("workspace_user_access")
+}
+
+enum PermissionLevel {
+  VIEW_ONLY
+  OPERATOR
+  MANAGER
+}
+
+// ===========================================
+// FACEBOOK INTEGRATION MODELS
+// ===========================================
+
+model FacebookAccount {
+  id              String    @id @default(uuid())
+  workspaceId     String    @map("workspace_id")
+  fbUserId        String    @map("fb_user_id") @db.VarChar(50)
+  fbUserName      String?   @map("fb_user_name") @db.VarChar(100)
+  accessToken     String    @map("access_token") @db.Text
+  tokenExpiresAt  DateTime? @map("token_expires_at")
+  isConnected     Boolean   @default(true) @map("is_connected")
+  lastSyncedAt    DateTime? @map("last_synced_at")
+  connectionError String?   @map("connection_error") @db.VarChar(500)
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  workspace       Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  pages           Page[]
+
+  @@unique([workspaceId, fbUserId])
+  @@index([workspaceId])
+  @@map("facebook_accounts")
+}
+
+model Page {
+  id                 String    @id @default(uuid())
+  workspaceId        String    @map("workspace_id")
+  facebookAccountId  String    @map("facebook_account_id")
+  fbPageId           String    @map("fb_page_id") @db.VarChar(50)
+  name               String    @db.VarChar(255)
+  profilePictureUrl  String?   @map("profile_picture_url") @db.VarChar(500)
+  coverPhotoUrl      String?   @map("cover_photo_url") @db.VarChar(500)
+  category           String?   @db.VarChar(100)
+  accessToken        String    @map("access_token") @db.Text
+  tokenExpiresAt     DateTime? @map("token_expires_at")
+  followersCount     Int       @default(0) @map("followers_count")
+  isActive           Boolean   @default(true) @map("is_active")
+  webhookSubscribed  Boolean   @default(false) @map("webhook_subscribed")
+  welcomeMessage     String?   @map("welcome_message") @db.Text
+  awayMessage        String?   @map("away_message") @db.Text
+  settings           Json?     @default("{}")
+  lastSyncedAt       DateTime? @map("last_synced_at")
+  tokenError         String?   @map("token_error") @db.VarChar(500)
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
+
+  workspace          Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  facebookAccount    FacebookAccount  @relation(fields: [facebookAccountId], references: [id], onDelete: Cascade)
+  contacts           Contact[]
+  messages           Message[]
+  otnTokens          OtnToken[]
+  recurringSubscriptions RecurringSubscription[]
+  conversations      Conversation[]
+  messageTagUsages   MessageTagUsage[]
+
+  @@unique([workspaceId, fbPageId])
+  @@index([workspaceId])
+  @@index([facebookAccountId])
+  @@map("pages")
+}
+
+// ===========================================
+// CONTACT MODELS
+// ===========================================
+
+model Contact {
+  id                      String          @id @default(uuid())
+  workspaceId             String          @map("workspace_id")
+  pageId                  String          @map("page_id")
+  psid                    String          @db.VarChar(50)
+  firstName               String?         @map("first_name") @db.VarChar(100)
+  lastName                String?         @map("last_name") @db.VarChar(100)
+  fullName                String?         @map("full_name") @db.VarChar(200)
+  profilePictureUrl       String?         @map("profile_picture_url") @db.VarChar(500)
+  locale                  String?         @db.VarChar(10)
+  timezone                Int?
+  gender                  String?         @db.VarChar(20)
+  source                  ContactSource   @default(ORGANIC)
+  sourceDetails           Json?           @map("source_details")
+  customFields            Json            @default("{}") @map("custom_fields")
+  engagementScore         Int             @default(0) @map("engagement_score")
+  engagementLevel         EngagementLevel @default(NEW) @map("engagement_level")
+  firstInteractionAt      DateTime?       @map("first_interaction_at")
+  lastInteractionAt       DateTime?       @map("last_interaction_at")
+  lastMessageFromContactAt DateTime?      @map("last_message_from_contact_at")
+  lastMessageToContactAt  DateTime?       @map("last_message_to_contact_at")
+  isSubscribed            Boolean         @default(true) @map("is_subscribed")
+  unsubscribedAt          DateTime?       @map("unsubscribed_at")
+  notes                   String?         @db.Text
+  createdAt               DateTime        @default(now()) @map("created_at")
+  updatedAt               DateTime        @updatedAt @map("updated_at")
+
+  workspace               Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  page                    Page            @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  tags                    ContactTag[]
+  messages                Message[]
+  otnTokens               OtnToken[]
+  recurringSubscriptions  RecurringSubscription[]
+  conversations           Conversation[]
+  segmentContacts         SegmentContact[]
+  messageTagUsages        MessageTagUsage[]
+  campaignLogs            CampaignLog[]
+  dripProgress            DripProgress[]
+
+  @@unique([pageId, psid])
+  @@index([workspaceId])
+  @@index([pageId])
+  @@index([engagementLevel])
+  @@index([lastInteractionAt])
+  @@index([isSubscribed])
+  @@map("contacts")
+}
+
+enum ContactSource {
+  ORGANIC
+  AD
+  COMMENT
+  REFERRAL
+}
+
+enum EngagementLevel {
+  HOT
+  WARM
+  COLD
+  INACTIVE
+  NEW
+}
+
+model Tag {
+  id          String    @id @default(uuid())
+  workspaceId String    @map("workspace_id")
+  name        String    @db.VarChar(50)
+  color       String    @default("#6B7280") @db.VarChar(7)
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  contacts    ContactTag[]
+
+  @@unique([workspaceId, name])
+  @@index([workspaceId])
+  @@map("tags")
+}
+
+model ContactTag {
+  id        String   @id @default(uuid())
+  contactId String   @map("contact_id")
+  tagId     String   @map("tag_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  contact   Contact  @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  tag       Tag      @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@unique([contactId, tagId])
+  @@index([tagId])
+  @@map("contact_tags")
+}
+
+model CustomFieldDefinition {
+  id          String          @id @default(uuid())
+  workspaceId String          @map("workspace_id")
+  fieldName   String          @map("field_name") @db.VarChar(50)
+  fieldKey    String          @map("field_key") @db.VarChar(50)
+  fieldType   CustomFieldType @map("field_type")
+  options     String[]        @default([])
+  isRequired  Boolean         @default(false) @map("is_required")
+  sortOrder   Int             @default(0) @map("sort_order")
+  createdAt   DateTime        @default(now()) @map("created_at")
+
+  workspace   Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, fieldKey])
+  @@index([workspaceId])
+  @@map("custom_field_definitions")
+}
+
+enum CustomFieldType {
+  TEXT
+  NUMBER
+  DATE
+  DROPDOWN
+  CHECKBOX
+}
+
+// ===========================================
+// 24-HOUR BYPASS MODELS
+// ===========================================
+
+model OtnToken {
+  id          String    @id @default(uuid())
+  contactId   String    @map("contact_id")
+  pageId      String    @map("page_id")
+  token       String    @db.VarChar(500)
+  title       String?   @db.VarChar(65)
+  payload     String?   @db.VarChar(1000)
+  isUsed      Boolean   @default(false) @map("is_used")
+  expiresAt   DateTime? @map("expires_at")
+  requestedAt DateTime  @default(now()) @map("requested_at")
+  optedInAt   DateTime? @map("opted_in_at")
+  usedAt      DateTime? @map("used_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  contact     Contact   @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  page        Page      @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  messages    Message[]
+
+  @@index([contactId])
+  @@index([pageId])
+  @@index([isUsed])
+  @@index([token])
+  @@map("otn_tokens")
+}
+
+model RecurringSubscription {
+  id                String              @id @default(uuid())
+  contactId         String              @map("contact_id")
+  pageId            String              @map("page_id")
+  token             String?             @db.VarChar(500)
+  title             String?             @db.VarChar(100)
+  frequency         String              @db.VarChar(20)
+  payload           String?             @db.VarChar(500)
+  topic             String              @default("default") @db.VarChar(100)
+  status            SubscriptionStatus  @default(PENDING)
+  expiresAt         DateTime?           @map("expires_at")
+  lastSentAt        DateTime?           @map("last_sent_at")
+  nextAllowedAt     DateTime?           @map("next_allowed_at")
+  messagesSent      Int                 @default(0) @map("messages_sent")
+  requestedAt       DateTime?           @map("requested_at")
+  optedInAt         DateTime?           @map("opted_in_at")
+  cancelledAt       DateTime?           @map("cancelled_at")
+  createdAt         DateTime            @default(now()) @map("created_at")
+  updatedAt         DateTime            @updatedAt @map("updated_at")
+
+  contact           Contact             @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  page              Page                @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  messages          Message[]
+
+  @@unique([contactId, pageId, topic])
+  @@index([contactId])
+  @@index([pageId])
+  @@index([status])
+  @@map("recurring_subscriptions")
+}
+
+enum SubscriptionStatus {
+  PENDING
+  ACTIVE
+  CANCELLED
+  EXPIRED
+}
+
+enum RecurringFrequency {
+  DAILY
+  WEEKLY
+  MONTHLY
+}
+
+// ===========================================
+// MESSAGE MODELS
+// ===========================================
+
+model Message {
+  id                       String        @id @default(uuid())
+  conversationId           String        @map("conversation_id")
+  contactId                String        @map("contact_id")
+  pageId                   String        @map("page_id")
+  campaignId               String?       @map("campaign_id")
+  direction                MessageDirection
+  messageType              MessageType   @map("message_type")
+  content                  Json
+  fbMessageId              String?       @unique @map("fb_message_id") @db.VarChar(100)
+  fbTimestamp              BigInt?       @map("fb_timestamp")
+  bypassMethod             BypassMethod? @map("bypass_method")
+  messageTag               MessageTag?   @map("message_tag")
+  otnTokenId               String?       @map("otn_token_id")
+  recurringSubscriptionId  String?       @map("recurring_subscription_id")
+  status                   MessageStatus @default(PENDING)
+  errorCode                String?       @map("error_code") @db.VarChar(50)
+  errorMessage             String?       @map("error_message") @db.VarChar(500)
+  sentAt                   DateTime?     @map("sent_at")
+  deliveredAt              DateTime?     @map("delivered_at")
+  readAt                   DateTime?     @map("read_at")
+  createdAt                DateTime      @default(now()) @map("created_at")
+
+  conversation             Conversation  @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  contact                  Contact       @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  page                     Page          @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  campaign                 Campaign?     @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+  otnToken                 OtnToken?     @relation(fields: [otnTokenId], references: [id], onDelete: SetNull)
+  recurringSubscription    RecurringSubscription? @relation(fields: [recurringSubscriptionId], references: [id], onDelete: SetNull)
+
+  @@index([conversationId])
+  @@index([contactId])
+  @@index([pageId])
+  @@index([campaignId])
+  @@index([status])
+  @@index([createdAt])
+  @@map("messages")
+}
+
+enum MessageDirection {
+  INBOUND
+  OUTBOUND
+}
+
+enum MessageType {
+  TEXT
+  IMAGE
+  VIDEO
+  FILE
+  TEMPLATE
+}
+
+enum MessageStatus {
+  PENDING
+  QUEUED
+  SENT
+  DELIVERED
+  READ
+  FAILED
+  RECEIVED
+}
+
+enum BypassMethod {
+  WITHIN_WINDOW
+  OTN_TOKEN
+  RECURRING_NOTIFICATION
+  MESSAGE_TAG_CONFIRMED_EVENT
+  MESSAGE_TAG_POST_PURCHASE
+  MESSAGE_TAG_ACCOUNT_UPDATE
+  MESSAGE_TAG_HUMAN_AGENT
+  SPONSORED_MESSAGE
+  BLOCKED
+}
+
+enum MessageTag {
+  CONFIRMED_EVENT_UPDATE
+  POST_PURCHASE_UPDATE
+  ACCOUNT_UPDATE
+  HUMAN_AGENT
+}
+
+// ===========================================
+// SEGMENT MODELS
+// ===========================================
+
+model Segment {
+  id               String      @id @default(uuid())
+  workspaceId      String      @map("workspace_id")
+  name             String      @db.VarChar(100)
+  description      String?     @db.VarChar(500)
+  segmentType      SegmentType @map("segment_type")
+  filters          Json
+  contactCount     Int         @default(0) @map("contact_count")
+  lastCalculatedAt DateTime?   @map("last_calculated_at")
+  createdAt        DateTime    @default(now()) @map("created_at")
+  updatedAt        DateTime    @updatedAt @map("updated_at")
+
+  workspace        Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  contacts         SegmentContact[]
+  campaigns        Campaign[]
+
+  @@index([workspaceId])
+  @@map("segments")
+}
+
+enum SegmentType {
+  DYNAMIC
+  STATIC
+}
+
+model SegmentContact {
+  id        String   @id @default(uuid())
+  segmentId String   @map("segment_id")
+  contactId String   @map("contact_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  segment   Segment  @relation(fields: [segmentId], references: [id], onDelete: Cascade)
+  contact   Contact  @relation(fields: [contactId], references: [id], onDelete: Cascade)
+
+  @@unique([segmentId, contactId])
+  @@index([contactId])
+  @@map("segment_contacts")
+}
+
+// ===========================================
+// CAMPAIGN MODELS
+// ===========================================
+
+model Campaign {
+  id                 String          @id @default(uuid())
+  workspaceId        String          @map("workspace_id")
+  createdByAdminId   String?         @map("created_by_admin_id")
+  createdByUserId    String?         @map("created_by_user_id")
+  name               String          @db.VarChar(100)
+  description        String?         @db.VarChar(500)
+  campaignType       CampaignType    @map("campaign_type")
+  status             CampaignStatus  @default(DRAFT)
+  audienceType       AudienceType    @map("audience_type")
+  audienceSegmentId  String?         @map("audience_segment_id")
+  audiencePageIds    String[]        @default([]) @map("audience_page_ids")
+  audienceContactIds String[]        @default([]) @map("audience_contact_ids")
+  messageContent     Json            @map("message_content")
+  bypassMethod       BypassMethod?   @map("bypass_method")
+  messageTag         MessageTag?     @map("message_tag")
+  scheduledAt        DateTime?       @map("scheduled_at")
+  timezone           String          @default("UTC") @db.VarChar(50)
+  recurringPattern   Json?           @map("recurring_pattern")
+  dripSequence       Json?           @map("drip_sequence")
+  isAbTest           Boolean         @default(false) @map("is_ab_test")
+  abVariants         Json?           @map("ab_variants")
+  abWinnerCriteria   ABWinnerCriteria? @map("ab_winner_criteria")
+  totalRecipients    Int             @default(0) @map("total_recipients")
+  sentCount          Int             @default(0) @map("sent_count")
+  deliveredCount     Int             @default(0) @map("delivered_count")
+  failedCount        Int             @default(0) @map("failed_count")
+  openedCount        Int             @default(0) @map("opened_count")
+  clickedCount       Int             @default(0) @map("clicked_count")
+  repliedCount       Int             @default(0) @map("replied_count")
+  unsubscribedCount  Int             @default(0) @map("unsubscribed_count")
+  startedAt          DateTime?       @map("started_at")
+  completedAt        DateTime?       @map("completed_at")
+  createdAt          DateTime        @default(now()) @map("created_at")
+  updatedAt          DateTime        @updatedAt @map("updated_at")
+
+  workspace          Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  createdByAdmin     Admin?          @relation(fields: [createdByAdminId], references: [id], onDelete: SetNull)
+  createdByUser      User?           @relation("UserCampaigns", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  audienceSegment    Segment?        @relation(fields: [audienceSegmentId], references: [id], onDelete: SetNull)
+  messages           Message[]
+  campaignLogs       CampaignLog[]
+  dripProgress       DripProgress[]
+
+  @@index([workspaceId])
+  @@index([status])
+  @@index([createdAt])
+  @@map("campaigns")
+}
+
+enum CampaignType {
+  ONE_TIME
+  SCHEDULED
+  RECURRING
+  DRIP
+  TRIGGER
+}
+
+enum CampaignStatus {
+  DRAFT
+  SCHEDULED
+  RUNNING
+  PAUSED
+  COMPLETED
+  CANCELLED
+}
+
+enum AudienceType {
+  ALL
+  SEGMENT
+  PAGES
+  MANUAL
+  CSV
+}
+
+enum ABWinnerCriteria {
+  DELIVERY
+  RESPONSE
+  CLICK
+}
+
+// ===========================================
+// CONVERSATION / INBOX MODELS
+// ===========================================
+
+model Conversation {
+  id                    String              @id @default(uuid())
+  workspaceId           String              @map("workspace_id")
+  pageId                String              @map("page_id")
+  contactId             String              @map("contact_id")
+  status                ConversationStatus  @default(OPEN)
+  assignedToUserId      String?             @map("assigned_to_user_id")
+  assignedToAdminId     String?             @map("assigned_to_admin_id")
+  labels                String[]            @default([])
+  lastMessageAt         DateTime?           @map("last_message_at")
+  lastMessagePreview    String?             @map("last_message_preview") @db.VarChar(200)
+  lastMessageDirection  MessageDirection?   @map("last_message_direction")
+  unreadCount           Int                 @default(0) @map("unread_count")
+  createdAt             DateTime            @default(now()) @map("created_at")
+  updatedAt             DateTime            @updatedAt @map("updated_at")
+
+  workspace             Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  page                  Page                @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  contact               Contact             @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  assignedToUser        User?               @relation(fields: [assignedToUserId], references: [id], onDelete: SetNull)
+  assignedToAdmin       Admin?              @relation("AdminConversations", fields: [assignedToAdminId], references: [id], onDelete: SetNull)
+  messages              Message[]
+  notes                 ConversationNote[]
+
+  @@unique([pageId, contactId])
+  @@index([workspaceId])
+  @@index([status])
+  @@index([lastMessageAt])
+  @@map("conversations")
+}
+
+enum ConversationStatus {
+  OPEN
+  PENDING
+  RESOLVED
+}
+
+model ConversationNote {
+  id               String   @id @default(uuid())
+  conversationId   String   @map("conversation_id")
+  createdByAdminId String?  @map("created_by_admin_id")
+  createdByUserId  String?  @map("created_by_user_id")
+  content          String   @db.Text
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  conversation     Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  createdByAdmin   Admin?       @relation(fields: [createdByAdminId], references: [id], onDelete: SetNull)
+  createdByUser    User?        @relation("UserNotes", fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  @@index([conversationId])
+  @@map("conversation_notes")
+}
+
+// ===========================================
+// ACTIVITY LOG MODELS
+// ===========================================
+
+model ActivityLog {
+  id          String    @id @default(uuid())
+  workspaceId String?   @map("workspace_id")
+  adminId     String?   @map("admin_id")
+  userId      String?   @map("user_id")
+  action      String    @db.VarChar(100)
+  entityType  String?   @map("entity_type") @db.VarChar(50)
+  entityId    String?   @map("entity_id") @db.VarChar(50)
+  details     Json?
+  ipAddress   String?   @map("ip_address") @db.VarChar(45)
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  workspace   Workspace? @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
+  admin       Admin?     @relation(fields: [adminId], references: [id], onDelete: SetNull)
+  user        User?      @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId])
+  @@index([adminId])
+  @@index([userId])
+  @@index([action])
+  @@index([createdAt])
+  @@map("activity_logs")
+}
+
+// ===========================================
+// SYSTEM SETTINGS MODELS
+// ===========================================
+
+model MessageTemplate {
+  id          String    @id @default(uuid())
+  workspaceId String    @map("workspace_id")
+  name        String    @db.VarChar(100)
+  category    String    @default("general") @db.VarChar(50)
+  content     Json      // { text, buttons, quickReplies, elements, attachmentUrl, attachmentType }
+  isActive    Boolean   @default(true) @map("is_active")
+  usageCount  Int       @default(0) @map("usage_count")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@index([category])
+  @@map("message_templates")
+}
+
+model CannedResponse {
+  id          String    @id @default(uuid())
+  workspaceId String    @map("workspace_id")
+  shortcut    String    @db.VarChar(50)
+  title       String    @db.VarChar(100)
+  content     String    @db.Text
+  category    String    @default("general") @db.VarChar(50)
+  usageCount  Int       @default(0) @map("usage_count")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, shortcut])
+  @@index([workspaceId])
+  @@map("canned_responses")
+}
+
+model SystemSetting {
+  id        String   @id @default(uuid())
+  key       String   @unique @db.VarChar(100)
+  value     Json
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("system_settings")
+}
+
+// ===========================================
+// LOGIN ATTEMPTS (Security / Rate Limiting)
+// ===========================================
+
+model LoginAttempt {
+  id          String    @id @default(uuid())
+  identifier  String    @db.VarChar(255) // email or username
+  ipAddress   String    @map("ip_address") @db.VarChar(45)
+  userAgent   String?   @map("user_agent") @db.VarChar(500)
+  success     Boolean   @default(false)
+  failReason  String?   @map("fail_reason") @db.VarChar(200)
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  @@index([identifier])
+  @@index([ipAddress])
+  @@index([createdAt])
+  @@map("login_attempts")
+}
+
+// ===========================================
+// MESSAGE TAG USAGE (Facebook Compliance)
+// ===========================================
+
+model MessageTagUsage {
+  id          String     @id @default(uuid())
+  contactId   String     @map("contact_id")
+  pageId      String     @map("page_id")
+  messageTag  MessageTag @map("message_tag")
+  messageId   String?    @map("message_id")
+  usedAt      DateTime   @default(now()) @map("used_at")
+
+  contact     Contact    @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  page        Page       @relation(fields: [pageId], references: [id], onDelete: Cascade)
+
+  @@index([contactId])
+  @@index([pageId])
+  @@index([messageTag])
+  @@index([usedAt])
+  @@map("message_tag_usage")
+}
+
+// ===========================================
+// CAMPAIGN LOGS (Per-Contact Send Tracking)
+// ===========================================
+
+model CampaignLog {
+  id           String            @id @default(uuid())
+  campaignId   String            @map("campaign_id")
+  contactId    String            @map("contact_id")
+  messageId    String?           @map("message_id")
+  status       CampaignLogStatus @default(PENDING)
+  variant      String?           @db.VarChar(10) // A/B variant identifier
+  sentAt       DateTime?         @map("sent_at")
+  deliveredAt  DateTime?         @map("delivered_at")
+  failedAt     DateTime?         @map("failed_at")
+  errorMessage String?           @map("error_message") @db.VarChar(500)
+  createdAt    DateTime          @default(now()) @map("created_at")
+
+  campaign     Campaign          @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  contact      Contact           @relation(fields: [contactId], references: [id], onDelete: Cascade)
+
+  @@unique([campaignId, contactId])
+  @@index([campaignId])
+  @@index([contactId])
+  @@index([status])
+  @@map("campaign_logs")
+}
+
+enum CampaignLogStatus {
+  PENDING
+  SENT
+  DELIVERED
+  FAILED
+  SKIPPED
+}
+
+// ===========================================
+// DRIP CAMPAIGN PROGRESS
+// ===========================================
+
+model DripProgress {
+  id              String          @id @default(uuid())
+  campaignId      String          @map("campaign_id")
+  contactId       String          @map("contact_id")
+  currentStep     Int             @default(0) @map("current_step")
+  totalSteps      Int             @map("total_steps")
+  status          DripStatus      @default(ACTIVE)
+  nextMessageAt   DateTime?       @map("next_message_at")
+  lastMessageAt   DateTime?       @map("last_message_at")
+  completedAt     DateTime?       @map("completed_at")
+  pausedAt        DateTime?       @map("paused_at")
+  createdAt       DateTime        @default(now()) @map("created_at")
+  updatedAt       DateTime        @updatedAt @map("updated_at")
+
+  campaign        Campaign        @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  contact         Contact         @relation(fields: [contactId], references: [id], onDelete: Cascade)
+
+  @@unique([campaignId, contactId])
+  @@index([campaignId])
+  @@index([contactId])
+  @@index([status])
+  @@index([nextMessageAt])
+  @@map("drip_progress")
+}
+
+enum DripStatus {
+  ACTIVE
+  PAUSED
+  COMPLETED
+  CANCELLED
+  FAILED
+}
+
+// ===========================================
+// ATTACHMENTS (File Upload + Facebook Cache)
+// ===========================================
+
+model Attachment {
+  id                 String    @id @default(uuid())
+  workspaceId        String    @map("workspace_id")
+  originalFilename   String    @map("original_filename") @db.VarChar(255)
+  mimeType           String    @map("mime_type") @db.VarChar(100)
+  sizeBytes          Int       @map("size_bytes")
+  storagePath        String    @map("storage_path") @db.VarChar(500)
+  fbAttachmentId     String?   @map("fb_attachment_id") @db.VarChar(255) // Cached Facebook attachment ID for reuse
+  fbAttachmentUrl    String?   @map("fb_attachment_url") @db.Text
+  uploadedByAdminId  String?   @map("uploaded_by_admin_id")
+  uploadedByUserId   String?   @map("uploaded_by_user_id")
+  createdAt          DateTime  @default(now()) @map("created_at")
+
+  workspace          Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@index([fbAttachmentId])
+  @@map("attachments")
+}
+
+// ===========================================
+// JOB QUEUE (Background Job Tracking)
+// ===========================================
+
+model JobQueue {
+  id            String      @id @default(uuid())
+  jobType       String      @map("job_type") @db.VarChar(100) // e.g. 'campaign_send', 'page_sync', 'backup'
+  payload       Json
+  status        JobStatus   @default(PENDING)
+  priority      Int         @default(0) // Higher = more urgent
+  attempts      Int         @default(0)
+  maxAttempts   Int         @default(3) @map("max_attempts")
+  lastError     String?     @map("last_error") @db.Text
+  scheduledAt   DateTime?   @map("scheduled_at")
+  startedAt     DateTime?   @map("started_at")
+  completedAt   DateTime?   @map("completed_at")
+  failedAt      DateTime?   @map("failed_at")
+  createdAt     DateTime    @default(now()) @map("created_at")
+  updatedAt     DateTime    @updatedAt @map("updated_at")
+
+  @@index([jobType])
+  @@index([status])
+  @@index([scheduledAt])
+  @@index([priority])
+  @@map("job_queue")
+}
+
+enum JobStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+  CANCELLED
+}

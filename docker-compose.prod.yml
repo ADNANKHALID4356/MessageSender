@@ -1,0 +1,151 @@
+# ===========================================
+# docker-compose.prod.yml — Production deployment
+#
+# Usage:
+#   docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+#
+# Required env vars (set in a .env.prod file or your secrets manager):
+#   POSTGRES_PASSWORD, REDIS_PASSWORD, JWT_SECRET, JWT_REFRESH_SECRET,
+#   ENCRYPTION_KEY, FACEBOOK_APP_ID, FACEBOOK_APP_SECRET,
+#   FACEBOOK_WEBHOOK_VERIFY_TOKEN, NEXT_PUBLIC_API_URL, NEXT_PUBLIC_SOCKET_URL,
+#   NEXT_PUBLIC_FACEBOOK_APP_ID, FRONTEND_URL
+# ===========================================
+
+version: '3.8'
+
+services:
+  # ── PostgreSQL ─────────────────────────────────────────
+  postgres:
+    restart: always
+    environment:
+      POSTGRES_USER: messagesender
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: messagesender_db
+    # Do NOT expose port 5432 publicly in production
+    ports: []
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+
+  # ── Redis ──────────────────────────────────────────────
+  redis:
+    restart: always
+    command: >
+      redis-server
+      --appendonly yes
+      --requirepass ${REDIS_PASSWORD}
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+    # Do NOT expose port 6379 publicly in production
+    ports: []
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+
+  # ── Backend API ────────────────────────────────────────
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: messagesender_backend
+    restart: always
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 4000
+      DATABASE_URL: postgresql://messagesender:${POSTGRES_PASSWORD}@postgres:5432/messagesender_db?schema=public
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      REDIS_DB: 0
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-15m}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
+      JWT_REFRESH_EXPIRES_IN: ${JWT_REFRESH_EXPIRES_IN:-7d}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY}
+      FRONTEND_URL: ${FRONTEND_URL}
+      FACEBOOK_APP_ID: ${FACEBOOK_APP_ID}
+      FACEBOOK_APP_SECRET: ${FACEBOOK_APP_SECRET}
+      FACEBOOK_WEBHOOK_VERIFY_TOKEN: ${FACEBOOK_WEBHOOK_VERIFY_TOKEN}
+      FACEBOOK_API_VERSION: ${FACEBOOK_API_VERSION:-v18.0}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_SECURE: ${SMTP_SECURE:-false}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      SMTP_FROM: ${SMTP_FROM:-}
+      THROTTLE_TTL: ${THROTTLE_TTL:-60000}
+      THROTTLE_LIMIT: ${THROTTLE_LIMIT:-100}
+      SENTRY_DSN: ${SENTRY_DSN:-}
+      SENTRY_ENVIRONMENT: production
+    ports:
+      - "4000:4000"
+    networks:
+      - messagesender_network
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:4000/api/v1/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+
+  # ── Frontend ───────────────────────────────────────────
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
+        NEXT_PUBLIC_SOCKET_URL: ${NEXT_PUBLIC_SOCKET_URL}
+        NEXT_PUBLIC_FACEBOOK_APP_ID: ${NEXT_PUBLIC_FACEBOOK_APP_ID}
+        NEXT_PUBLIC_FACEBOOK_AUTH_APP_ID: ${NEXT_PUBLIC_FACEBOOK_AUTH_APP_ID:-}
+    container_name: messagesender_frontend
+    restart: always
+    depends_on:
+      backend:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      HOSTNAME: 0.0.0.0
+    ports:
+      - "3000:3000"
+    networks:
+      - messagesender_network
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3000 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+
+  # ── Disable development-only services ─────────────────
+  pgadmin:
+    profiles:
+      - dev-tools
+
+  redis-commander:
+    profiles:
+      - dev-tools
+
+networks:
+  messagesender_network:
+    name: messagesender_network
+
+volumes:
+  postgres_data:
+  redis_data:

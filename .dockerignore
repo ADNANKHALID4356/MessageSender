@@ -1,0 +1,59 @@
+# Docker build context exclusions — keep images lean and secure
+
+# Dependencies (installed fresh in Docker)
+**/node_modules
+**/.pnpm-store
+
+# Build artifacts (rebuilt in Docker)
+**/dist
+**/.next
+**/out
+
+# Environment files (secrets must NOT be baked in)
+.env
+.env.*
+!.env.example
+!.env.prod.example
+**/. env.local
+
+# Git & VCS
+.git
+.gitignore
+**/.gitkeep
+
+# IDE & OS
+.vscode
+.idea
+**/.DS_Store
+**/Thumbs.db
+
+# Tests & coverage
+**/coverage
+**/__tests__
+**/*.test.ts
+**/*.test.tsx
+**/*.spec.ts
+**/*.spec.tsx
+**/jest.config.*
+**/jest.setup.*
+
+# Documentation
+docs/
+*.md
+!README.md
+
+# Database backups (backend/backups/)
+backend/backups/
+
+# Logs
+**/*.log
+**/logs
+
+# Temp uploads
+uploads/
+temp/
+
+# Dev-only scripts
+backend/fix-password.js
+backend/test-login.js
+backend/test-login.ps1
