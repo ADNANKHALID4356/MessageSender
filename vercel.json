@@ -3,5 +3,5 @@
   "buildCommand": "pnpm --filter @messagesender/frontend build",
   "outputDirectory": "frontend/.next",
   "installCommand": "pnpm install",
-  "framework": null
+  "framework": "nextjs"
 }
