@@ -177,7 +177,7 @@ export class FacebookService {
     return pages.map((page) => ({
       id: page.id,
       pageId: page.id,
-      name: page.name,
+          name: page.name ?? page.id ?? 'Unknown Page',
       category: page.category,
       picture: page.picture?.data?.url,
       isConnected: connectedPageIds.has(page.id),

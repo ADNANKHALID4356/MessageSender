@@ -165,7 +165,7 @@ export default function PagesPage() {
   
   // Filter pages
   const filteredPages = pagesList.filter((page) => {
-    const matchesSearch = page.pageName.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesSearch = (page.pageName ?? '').toLowerCase().includes(searchQuery.toLowerCase());
     const pageStatus = getPageStatus(page);
     const matchesStatus = statusFilter === 'all' || pageStatus === statusFilter;
     return matchesSearch && matchesStatus;
@@ -274,7 +274,7 @@ export default function PagesPage() {
                     const issues = [];
                     if (!p.isActive) issues.push('inactive');
                     if (!p.isWebhookActive) issues.push('webhook disconnected');
-                    return `${p.pageName} (${issues.join(', ')})`;
+                    return `${p.pageName ?? 'Unnamed Page'} (${issues.join(', ')})`;
                   })
                   .join(' · ')}
               </p>

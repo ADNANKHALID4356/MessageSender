@@ -88,7 +88,7 @@ export function PageSelectionModal({
 
   // Filter pages by search
   const filteredPages = availablePages?.filter((page) =>
-    page.name.toLowerCase().includes(searchQuery.toLowerCase())
+    (page.name ?? '').toLowerCase().includes(searchQuery.toLowerCase())
   ) || [];
 
   // Separate connected and available pages
