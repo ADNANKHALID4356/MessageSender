@@ -1,15 +1,40 @@
 import axios, { AxiosInstance, AxiosRequestConfig, AxiosError, InternalAxiosRequestConfig } from 'axios';
 
 // Normalize: trim whitespace/newlines, strip trailing slashes
-let base_url = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api/v1').trim().replace(/\/+$/, '');
+const normalizeBaseUrl = (value: string): string => value.trim().replace(/\/+$/, '');
+
+const ensureApiPrefix = (value: string): string => {
+  if (!value) return value;
+  if (value.endsWith('/api/v1')) return value;
+  return `${value}/api/v1`;
+};
+
+const resolveApiBaseUrl = (): string => {
+  const configuredUrl = process.env.NEXT_PUBLIC_API_URL;
+  const normalizedConfiguredUrl = normalizeBaseUrl(configuredUrl || '');
+
+  // In browser production deployments, prefer same-origin proxy when URL is missing
+  // or accidentally points to localhost. This avoids CORS/tunnel mismatch issues.
+  if (
+    typeof window !== 'undefined' &&
+    process.env.NODE_ENV === 'production' &&
+    (!normalizedConfiguredUrl || normalizedConfiguredUrl.includes('localhost'))
+  ) {
+    return '/api/v1';
+  }
+
+  if (normalizedConfiguredUrl) {
+    return normalizedConfiguredUrl.startsWith('/')
+      ? ensureApiPrefix(normalizedConfiguredUrl)
+      : ensureApiPrefix(normalizedConfiguredUrl);
+  }
+
+  return 'http://localhost:4000/api/v1';
+};
 
 // Specifically handle the case where the user forgets to append /api/v1 to the NEXT_PUBLIC_API_URL
 // Ignore if it already ends with api/v1 or similar
-if (!base_url.endsWith('/api/v1')) {
-  base_url = `${base_url}/api/v1`;
-}
-
-const API_BASE_URL = base_url;
+const API_BASE_URL = resolveApiBaseUrl();
 
 // Workspace ID resolver — set by the workspace store
 let _getWorkspaceId: (() => string | null) | null = null;
@@ -95,7 +120,10 @@ const createApiClient = (): AxiosInstance => {
   client.interceptors.response.use(
     (response) => response,
     async (error: AxiosError) => {
-      const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean };
+      const originalRequest = error.config as InternalAxiosRequestConfig & {
+        _retry?: boolean;
+        _proxyRetry?: boolean;
+      };
 
       // Handle 401 - try refresh token
       if (error.response?.status === 401 && !originalRequest._retry) {
@@ -121,12 +149,31 @@ const createApiClient = (): AxiosInstance => {
         }
       }
 
+      // If auth endpoints return 404 with an absolute base URL in production,
+      // retry once through same-origin Next.js rewrite (/api/v1) to avoid stale tunnel URL issues.
+      if (
+        error.response?.status === 404 &&
+        !originalRequest._proxyRetry &&
+        typeof window !== 'undefined' &&
+        process.env.NODE_ENV === 'production' &&
+        API_BASE_URL.startsWith('http') &&
+        !!originalRequest.url &&
+        originalRequest.url.startsWith('/auth')
+      ) {
+        originalRequest._proxyRetry = true;
+        originalRequest.baseURL = '/api/v1';
+        return client(originalRequest);
+      }
+
       // Transform error for better handling
       const errorResponse = {
         status: error.response?.status || 500,
         message: (error.response?.data as { message?: string })?.message || error.message || 'An error occurred',
         code: (error.response?.data as { code?: string })?.code || 'UNKNOWN_ERROR',
         errors: (error.response?.data as { errors?: Record<string, string[]> })?.errors,
+        method: originalRequest?.method?.toUpperCase(),
+        url: originalRequest?.url,
+        baseURL: originalRequest?.baseURL,
       };
 
       return Promise.reject(errorResponse);
