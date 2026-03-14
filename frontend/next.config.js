@@ -1,4 +1,9 @@
 /** @type {import('next').NextConfig} */
+const normalizeBackendOrigin = (url) => {
+  const normalized = (url || '').trim().replace(/\/+$/, '');
+  return normalized.replace(/\/api\/v1$/, '');
+};
+
 const nextConfig = {
   reactStrictMode: true,
   transpilePackages: ['@messagesender/shared'],
@@ -46,7 +51,9 @@ const nextConfig = {
     ];
   },
   async rewrites() {
-    const backendUrl = process.env.BACKEND_URL || 'http://localhost:4000';
+    // BACKEND_URL must be backend origin (without /api/v1).
+    // If /api/v1 is mistakenly included, normalize it to avoid /api/v1/api/v1 duplication.
+    const backendUrl = normalizeBackendOrigin(process.env.BACKEND_URL || 'http://localhost:4000');
     return [
       {
         source: '/api/v1/:path*',
