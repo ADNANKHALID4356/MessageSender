@@ -91,6 +91,7 @@ export class FacebookApiService {
 
       return data as FacebookTokenResponse;
     } catch (error) {
+      if (error instanceof HttpException) throw error;
       this.logger.error('Token exchange failed:', error);
       throw new HttpException(
         'Failed to exchange authorization code',
@@ -126,6 +127,7 @@ export class FacebookApiService {
 
       return data as FacebookTokenResponse;
     } catch (error) {
+      if (error instanceof HttpException) throw error;
       this.logger.error('Long-lived token failed:', error);
       throw new HttpException(
         'Failed to get long-lived token',
@@ -154,6 +156,7 @@ export class FacebookApiService {
 
       return data as FacebookUserInfo;
     } catch (error) {
+      if (error instanceof HttpException) throw error;
       this.logger.error('Get user info failed:', error);
       throw new HttpException(
         'Failed to get user information',
@@ -185,6 +188,7 @@ export class FacebookApiService {
 
       return data.data || [];
     } catch (error) {
+      if (error instanceof HttpException) throw error;
       this.logger.error('Get pages failed:', error);
       throw new HttpException(
         'Failed to get user pages',
@@ -218,6 +222,7 @@ export class FacebookApiService {
 
       return data.access_token;
     } catch (error) {
+      if (error instanceof HttpException) throw error;
       this.logger.error('Get page token failed:', error);
       throw new HttpException(
         'Failed to get page access token',

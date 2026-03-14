@@ -179,7 +179,11 @@ export default function PagesPage() {
 
   const handleConnectPage = () => {
     if (workspaceId) {
-      initiateFacebookOAuth.mutate(workspaceId);
+      if (connectionStatus?.connected) {
+        setShowPageSelectionModal(true);
+      } else {
+        initiateFacebookOAuth.mutate(workspaceId);
+      }
     }
   };
 

@@ -85,7 +85,11 @@ export const useAuthStore = create<AuthState>()(
         }
         
         try {
-          const user = await authService.getProfile();
+          // Use AbortController to timeout after 5s so the app doesn't hang
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 5000);
+          const user = await authService.getProfile(controller.signal);
+          clearTimeout(timeoutId);
           const currentWorkspaceId = get().currentWorkspaceId;
           
           // Ensure current workspace is still valid for this user

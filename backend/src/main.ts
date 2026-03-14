@@ -35,6 +35,7 @@ async function bootstrap() {
     logger: process.env.NODE_ENV === 'production'
       ? ['error', 'warn', 'log']
       : ['error', 'warn', 'log', 'debug', 'verbose'],
+    rawBody: true, // Required for webhook signature verification
   });
   const configService = app.get(ConfigService);
 
@@ -53,7 +54,7 @@ async function bootstrap() {
     origin: frontendUrls,
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Workspace-Id'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Workspace-Id', 'ngrok-skip-browser-warning'],
   });
 
   // Global validation pipe

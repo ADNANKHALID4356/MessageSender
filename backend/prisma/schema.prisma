@@ -174,8 +174,8 @@ model Page {
   facebookAccountId  String    @map("facebook_account_id")
   fbPageId           String    @map("fb_page_id") @db.VarChar(50)
   name               String    @db.VarChar(255)
-  profilePictureUrl  String?   @map("profile_picture_url") @db.VarChar(500)
-  coverPhotoUrl      String?   @map("cover_photo_url") @db.VarChar(500)
+  profilePictureUrl  String?   @map("profile_picture_url") @db.Text
+  coverPhotoUrl      String?   @map("cover_photo_url") @db.Text
   category           String?   @db.VarChar(100)
   accessToken        String    @map("access_token") @db.Text
   tokenExpiresAt     DateTime? @map("token_expires_at")

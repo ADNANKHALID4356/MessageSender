@@ -26,19 +26,19 @@ export class OAuthCallbackDto {
 }
 
 export class ConnectPageDto {
-  @ApiProperty({ description: 'Facebook Account ID' })
-  @IsUUID()
-  @IsNotEmpty()
+  @ApiProperty({ description: 'Facebook Account ID (UUID)' })
+  @IsUUID('4', { message: 'facebookAccountId must be a valid UUID' })
+  @IsNotEmpty({ message: 'facebookAccountId is required' })
   facebookAccountId: string;
 
-  @ApiProperty({ description: 'Facebook Page ID' })
-  @IsString()
-  @IsNotEmpty()
+  @ApiProperty({ description: 'Facebook Page ID (numeric string)' })
+  @IsString({ message: 'pageId must be a string' })
+  @IsNotEmpty({ message: 'pageId is required' })
   pageId: string;
 
   @ApiProperty({ description: 'Page name' })
-  @IsString()
-  @IsNotEmpty()
+  @IsString({ message: 'pageName must be a string' })
+  @IsNotEmpty({ message: 'pageName is required' })
   pageName: string;
 
   @ApiPropertyOptional({ description: 'Page access token' })

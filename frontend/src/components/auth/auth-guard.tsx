@@ -10,7 +10,7 @@ interface AuthGuardProps {
   requireAdmin?: boolean;
 }
 
-const PUBLIC_ROUTES = ['/login', '/forgot-password', '/reset-password'];
+const PUBLIC_ROUTES = ['/login', '/signup', '/admin/signup', '/forgot-password', '/reset-password'];
 
 export function AuthGuard({ children, requireAdmin = false }: AuthGuardProps) {
   const router = useRouter();

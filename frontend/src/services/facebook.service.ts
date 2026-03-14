@@ -21,6 +21,10 @@ export interface FacebookPage {
   picture?: string;
   isConnected?: boolean;
   isWebhookActive?: boolean;
+  /** Page access token returned by getAvailablePages – used to skip a redundant FB API call on connect */
+  pageAccessToken?: string | null;
+  /** False when the Facebook API didn't return an access token for this page (insufficient permissions) */
+  canConnect?: boolean;
 }
 
 export interface ConnectionStatus {
@@ -37,6 +41,8 @@ export interface ConnectPageRequest {
   facebookAccountId: string;
   pageId: string;
   pageName: string;
+  /** Page access token obtained during getAvailablePages – avoids an extra Facebook API call */
+  pageAccessToken?: string;
 }
 
 export interface RefreshTokenResponse {

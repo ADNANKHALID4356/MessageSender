@@ -108,7 +108,9 @@ export function PageSelectionModal({
   };
 
   const handleConnectSelected = async () => {
-    const pagesToConnect = unconnectedPages.filter((p) => selectedPages.has(p.id));
+    const pagesToConnect = unconnectedPages.filter(
+      (p) => selectedPages.has(p.id) && p.canConnect !== false
+    );
     
     for (const page of pagesToConnect) {
       setConnectingPages((prev) => {
@@ -120,6 +122,7 @@ export function PageSelectionModal({
         facebookAccountId,
         pageId: page.id,
         pageName: page.name,
+        pageAccessToken: page.pageAccessToken ?? undefined,
       });
     }
   };
@@ -134,11 +137,12 @@ export function PageSelectionModal({
       facebookAccountId,
       pageId: page.id,
       pageName: page.name,
+      pageAccessToken: page.pageAccessToken ?? undefined,
     });
   };
 
   const selectedCount = Array.from(selectedPages).filter(
-    (id) => unconnectedPages.some((p) => p.id === id)
+    (id) => unconnectedPages.some((p) => p.id === id && p.canConnect !== false)
   ).length;
 
   return (
@@ -298,7 +302,7 @@ function PageListItem({
         !isConnected && isSelected && "bg-blue-50 border-blue-200 dark:bg-blue-900/20 dark:border-blue-800",
         !isConnected && !isSelected && "bg-background hover:bg-muted/50 cursor-pointer"
       )}
-      onClick={() => !isConnected && !isConnecting && onToggle()}
+      onClick={() => !isConnected && !isConnecting && page.canConnect !== false && onToggle()}
     >
       {/* Checkbox/Status */}
       <div className="flex-shrink-0">
@@ -354,7 +358,8 @@ function PageListItem({
             e.stopPropagation();
             onConnect();
           }}
-          disabled={isConnecting}
+          disabled={isConnecting || page.canConnect === false}
+          title={page.canConnect === false ? 'Admin access required to connect this page' : undefined}
           className="flex-shrink-0"
         >
           {isConnecting ? (

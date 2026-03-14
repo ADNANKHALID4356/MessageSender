@@ -206,8 +206,8 @@ export const authService = {
   /**
    * Get current user profile
    */
-  async getProfile(): Promise<AuthUser> {
-    return api.get<AuthUser>('/auth/me');
+  async getProfile(signal?: AbortSignal): Promise<AuthUser> {
+    return api.get<AuthUser>('/auth/me', { signal });
   },
 
   /**

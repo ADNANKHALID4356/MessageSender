@@ -8,7 +8,7 @@ import type { NextRequest } from 'next/server';
  * Redirects unauthenticated users to /login before any page HTML is served.
  */
 
-const PUBLIC_ROUTES = ['/login', '/signup', '/admin/signup'];
+const PUBLIC_ROUTES = ['/login', '/signup', '/admin/signup', '/forgot-password', '/reset-password'];
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;

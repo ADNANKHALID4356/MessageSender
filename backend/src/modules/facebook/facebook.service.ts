@@ -161,11 +161,14 @@ export class FacebookService {
       throw new NotFoundException('Facebook account not found');
     }
 
-    const pages = await this.fbApi.getUserPages(this.encryption.decryptIfNeeded(account.accessToken));
+    const decryptedToken = this.encryption.decryptIfNeeded(account.accessToken);
+    const pages = await this.fbApi.getUserPages(decryptedToken);
 
-    // Get already connected page IDs
+    // Check ALL active pages globally (not just this account) to stay consistent
+    // with the connectPage check — prevents showing "available" pages that would
+    // be rejected on connection.
     const connectedPages = await this.prisma.page.findMany({
-      where: { facebookAccountId },
+      where: { fbPageId: { in: pages.map((p) => p.id) }, isActive: true },
       select: { fbPageId: true },
     });
 
@@ -173,10 +176,15 @@ export class FacebookService {
 
     return pages.map((page) => ({
       id: page.id,
+      pageId: page.id,
       name: page.name,
       category: page.category,
       picture: page.picture?.data?.url,
       isConnected: connectedPageIds.has(page.id),
+      // Pass through the page access token so connectPage can use it directly,
+      // avoiding a redundant Facebook API call that could fail on expiry/permission issues.
+      pageAccessToken: page.access_token || null,
+      canConnect: !!page.access_token,
     }));
   }
 
@@ -184,6 +192,13 @@ export class FacebookService {
    * Connect a Facebook page to the workspace
    */
   async connectPage(workspaceId: string, dto: ConnectPageDto) {
+    // Validate DTO data is present
+    if (!dto.facebookAccountId || !dto.pageId || !dto.pageName) {
+      throw new BadRequestException(
+        'Missing required fields: facebookAccountId, pageId, and pageName are required'
+      );
+    }
+
     const account = await this.prisma.facebookAccount.findUnique({
       where: { id: dto.facebookAccountId },
     });
@@ -192,20 +207,71 @@ export class FacebookService {
       throw new NotFoundException('Facebook account not found in this workspace');
     }
 
-    // Check if page is already connected
+    // Check if page already exists (active OR inactive)
     const existingPage = await this.prisma.page.findFirst({
       where: { fbPageId: dto.pageId },
     });
 
-    if (existingPage) {
-      throw new BadRequestException('Page is already connected');
+    if (existingPage && existingPage.isActive) {
+      throw new BadRequestException(
+        `Page "${dto.pageName}" is already actively connected${existingPage.workspaceId !== workspaceId ? ' to another workspace' : ''}.`
+      );
     }
 
-    // Get page access token (never expires)
-    const pageAccessToken = await this.fbApi.getPageAccessToken(
-      dto.pageId,
-      this.encryption.decryptIfNeeded(account.accessToken)
-    );
+    // Resolve the page access token.
+    // Priority order:
+    //   1. Use the token passed in from getAvailablePages (avoids an extra Facebook API call)
+    //   2. Fetch from /me/accounts (existing behaviour)
+    //   3. Fetch directly from /{pageId}?fields=access_token (fallback)
+    const decryptedToken = this.encryption.decryptIfNeeded(account.accessToken);
+
+    let pageAccessToken: string;
+    let pageCategory: string | null = null;
+    let pagePictureUrl: string | null = null;
+
+    if (dto.pageAccessToken) {
+      // Fast path: token already supplied by the client
+      pageAccessToken = dto.pageAccessToken;
+    } else {
+      // Fetch all managed pages and look up the target page's token
+      let userPages;
+      try {
+        userPages = await this.fbApi.getUserPages(decryptedToken);
+      } catch (error) {
+        this.logger.error(`Failed to fetch user pages from Facebook: ${error}`);
+        throw new BadRequestException(
+          'Failed to fetch pages from Facebook. Your access token may have expired — please reconnect your Facebook account.'
+        );
+      }
+
+      const targetPage = userPages.find((p) => p.id === dto.pageId);
+
+      if (!targetPage) {
+        throw new BadRequestException(
+          'Page not found. Ensure you have admin access to this page and that it belongs to the connected Facebook account.',
+        );
+      }
+
+      pageCategory = targetPage.category || null;
+      pagePictureUrl = targetPage.picture?.data?.url || null;
+
+      if (targetPage.access_token) {
+        pageAccessToken = targetPage.access_token;
+      } else {
+        // Fallback: request the page token directly via /{pageId}?fields=access_token
+        this.logger.warn(
+          `access_token not returned by /me/accounts for page ${dto.pageId} — trying direct page token endpoint`
+        );
+        try {
+          pageAccessToken = await this.fbApi.getPageAccessToken(dto.pageId, decryptedToken);
+        } catch (fallbackError) {
+          this.logger.error(`Fallback getPageAccessToken failed for page ${dto.pageId}: ${fallbackError}`);
+          throw new BadRequestException(
+            'No access token available for this page. Ensure you have Admin access to the page and that the app has the required permissions (pages_manage_metadata).',
+          );
+        }
+      }
+    }
 
     // Subscribe page to webhook
     const subscribed = await this.fbApi.subscribePageToWebhook(
@@ -219,24 +285,41 @@ export class FacebookService {
       );
     }
 
-    // Get additional page info
-    const pageInfo = await this.fbApi.getPageInfo(dto.pageId, pageAccessToken);
+    let page;
 
-    // Create page record
-    const page = await this.prisma.page.create({
-      data: {
-        workspaceId,
-        facebookAccountId: dto.facebookAccountId,
-        fbPageId: dto.pageId,
-        name: dto.pageName,
-        accessToken: this.encryption.encrypt(pageAccessToken),
-        category: pageInfo.category,
-        profilePictureUrl: pageInfo.picture?.data?.url,
-        webhookSubscribed: subscribed,
-      },
-    });
-
-    this.logger.log(`Page ${dto.pageName} (${dto.pageId}) connected to workspace ${workspaceId}`);
+    if (existingPage && !existingPage.isActive) {
+      // Reactivate a previously-disconnected page
+      page = await this.prisma.page.update({
+        where: { id: existingPage.id },
+        data: {
+          workspaceId,
+          facebookAccountId: dto.facebookAccountId,
+          name: dto.pageName,
+          accessToken: this.encryption.encrypt(pageAccessToken),
+          category: pageCategory,
+          profilePictureUrl: pagePictureUrl,
+          webhookSubscribed: subscribed,
+          isActive: true,
+          tokenError: null,
+        },
+      });
+      this.logger.log(`Page ${dto.pageName} (${dto.pageId}) reactivated in workspace ${workspaceId}`);
+    } else {
+      // Create brand-new page record
+      page = await this.prisma.page.create({
+        data: {
+          workspaceId,
+          facebookAccountId: dto.facebookAccountId,
+          fbPageId: dto.pageId,
+          name: dto.pageName,
+          accessToken: this.encryption.encrypt(pageAccessToken),
+          category: pageCategory,
+          profilePictureUrl: pagePictureUrl,
+          webhookSubscribed: subscribed,
+        },
+      });
+      this.logger.log(`Page ${dto.pageName} (${dto.pageId}) connected to workspace ${workspaceId}`);
+    }
 
     return page;
   }

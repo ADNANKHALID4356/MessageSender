@@ -1,6 +1,15 @@
 import axios, { AxiosInstance, AxiosRequestConfig, AxiosError, InternalAxiosRequestConfig } from 'axios';
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api/v1';
+// Normalize: trim whitespace/newlines, strip trailing slashes
+let base_url = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api/v1').trim().replace(/\/+$/, '');
+
+// Specifically handle the case where the user forgets to append /api/v1 to the NEXT_PUBLIC_API_URL
+// Ignore if it already ends with api/v1 or similar
+if (!base_url.endsWith('/api/v1')) {
+  base_url = `${base_url}/api/v1`;
+}
+
+const API_BASE_URL = base_url;
 
 // Workspace ID resolver — set by the workspace store
 let _getWorkspaceId: (() => string | null) | null = null;
@@ -58,8 +67,9 @@ const createApiClient = (): AxiosInstance => {
     baseURL: API_BASE_URL,
     headers: {
       'Content-Type': 'application/json',
+      'ngrok-skip-browser-warning': 'true',
     },
-    timeout: 30000,
+    timeout: 10000,
   });
 
   // Request interceptor - add auth token + workspace header

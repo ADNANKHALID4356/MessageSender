@@ -7,6 +7,7 @@ import {
 import { PrismaService } from '../../prisma/prisma.service';
 import { RedisService } from '../../redis/redis.service';
 import { FacebookApiService, FacebookSendMessagePayload } from '../facebook/facebook-api.service';
+import { EncryptionService } from '../../common/encryption.service';
 import {
   MessageStatus,
   MessageDirection,
@@ -102,6 +103,7 @@ export class SendApiService {
     private prisma: PrismaService,
     private redis: RedisService,
     private facebookApi: FacebookApiService,
+    private encryption: EncryptionService,
   ) {}
 
   // ===========================================
@@ -318,9 +320,10 @@ export class SendApiService {
         },
       });
 
-      // Send via Facebook API
+      // Send via Facebook API (decrypt the stored token first)
+      const decryptedToken = this.encryption.decryptIfNeeded(page.accessToken);
       const fbResponse = await this.facebookApi.sendMessage(
-        page.accessToken,
+        decryptedToken,
         fbPayload,
       );
 
