@@ -92,8 +92,19 @@ if [[ "${WRITE}" == "true" ]]; then
     local pattern="$1" replacement="$2" file="$3"
     local tmp
     tmp=$(mktemp)
-    sed "s|${pattern}|${replacement}|g" "${file}" > "${tmp}"
-    mv "${tmp}" "${file}"
+    if sed "s|${pattern}|${replacement}|g" "${file}" > "${tmp}"; then
+      # Only replace the original if sed produced a non-empty result
+      if [[ ! -s "${tmp}" ]]; then
+        rm -f "${tmp}"
+        echo -e "${RED}Error: sed produced empty output for pattern '${pattern}'${NC}"
+        exit 1
+      fi
+      mv "${tmp}" "${file}"
+    else
+      rm -f "${tmp}"
+      echo -e "${RED}Error: sed failed for pattern '${pattern}'${NC}"
+      exit 1
+    fi
   }
 
   _sed_replace "CHANGE_ME_strong_postgres_password"                                    "${POSTGRES_PASSWORD}"    "${ENV_FILE}"
