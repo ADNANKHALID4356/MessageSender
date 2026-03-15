@@ -5,6 +5,25 @@
 
 ---
 
+## ⚡ Before You Begin — Gather Your Credentials
+
+Before starting the deployment, read **[`docs/CREDENTIALS_REQUIRED.md`](./CREDENTIALS_REQUIRED.md)**.
+It lists every credential you need, where to get it, and where to put it.
+
+### Summary of what you'll need
+
+| Category | Credentials |
+|---|---|
+| **VPS** | VPS IP address, SSH username, SSH key pair |
+| **Domain** | Domain name with DNS A records pointing to VPS IP |
+| **Facebook** | Facebook App ID, App Secret (from developers.facebook.com) |
+| **Auto-generated** | DB password, Redis password, JWT secrets, Encryption key (run `bash scripts/generate-secrets.sh --write`) |
+| **Optional** | SMTP credentials (for email), Sentry DSN (for error monitoring) |
+
+> 🔒 **Security:** Never share credentials with anyone, including AI assistants. Configure them yourself directly on your VPS and in GitHub Secrets.
+
+---
+
 ## Table of Contents
 
 1. [VPS Requirements & Provider Selection](#1-vps-requirements--provider-selection)
