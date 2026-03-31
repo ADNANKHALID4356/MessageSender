@@ -5,7 +5,7 @@
 # ===========================================
 
 # ── Stage 1: Install & build ──────────────────────────────
-FROM node:20-alpine AS builder
+FROM node:25-alpine AS builder
 
 RUN corepack enable && corepack prepare pnpm@8.15.4 --activate
 
@@ -44,7 +44,7 @@ RUN pnpm --filter frontend build
 
 
 # ── Stage 2: Production image ────────────────────────────
-FROM node:20-alpine AS production
+FROM node:25-alpine AS production
 
 RUN addgroup -S appgroup && adduser -S appuser -G appgroup
 
